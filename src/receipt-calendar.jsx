@@ -6,6 +6,46 @@ const ReceiptCalendar = () => {
   const [isPrinting, setIsPrinting] = useState(true);
   const [printProgress, setPrintProgress] = useState(0);
   const [showPrinter, setShowPrinter] = useState(true);
+  const [confetti, setConfetti] = useState([]);
+
+  // US Holidays (month is 0-indexed) - dates for 2026
+  const usHolidays = [
+    { month: 0, day: 1, name: "New Year's Day" },
+    { month: 0, day: 19, name: "MLK Day" }, // 3rd Monday of January
+    { month: 1, day: 14, name: "Valentine's Day" },
+    { month: 1, day: 16, name: "Presidents' Day" }, // 3rd Monday of February
+    { month: 2, day: 17, name: "St. Patrick's Day" },
+    { month: 4, day: 25, name: "Memorial Day" }, // Last Monday of May
+    { month: 6, day: 4, name: "Independence Day" },
+    { month: 8, day: 7, name: "Labor Day" }, // 1st Monday of September
+    { month: 9, day: 31, name: "Halloween" },
+    { month: 10, day: 11, name: "Veterans Day" },
+    { month: 10, day: 26, name: "Thanksgiving" }, // 4th Thursday of November
+    { month: 11, day: 25, name: "Christmas" },
+    { month: 11, day: 31, name: "New Year's Eve" },
+  ];
+
+  const isHoliday = (day) => {
+    return usHolidays.find(h => h.month === currentDate.getMonth() && h.day === day);
+  };
+
+  // Confetti effect
+  const triggerConfetti = () => {
+    const colors = ['#ff6b6b', '#4ecdc4', '#ffe66d', '#95e1d3', '#f38181', '#aa96da'];
+    const newConfetti = [];
+    for (let i = 0; i < 50; i++) {
+      newConfetti.push({
+        id: i,
+        x: Math.random() * 100,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        delay: Math.random() * 0.5,
+        size: Math.random() * 8 + 4,
+        rotation: Math.random() * 360,
+      });
+    }
+    setConfetti(newConfetti);
+    setTimeout(() => setConfetti([]), 3000);
+  };
   
   const months = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 
                   'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
@@ -191,7 +231,21 @@ const ReceiptCalendar = () => {
             background: 'linear-gradient(180deg, #1a1a1a 0%, #0a0a0a 100%)',
             borderRadius: '2px',
             boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.8)',
-          }} />
+            overflow: 'hidden',
+          }}>
+            {/* Paper Roll visible inside slot */}
+            <div style={{
+              position: 'absolute',
+              top: '2px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: '320px',
+              height: '20px',
+              background: 'linear-gradient(180deg, #e8e5db 0%, #d4d1c7 50%, #c9c6bc 100%)',
+              borderRadius: '50%',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.4), inset 0 -2px 4px rgba(0,0,0,0.1)',
+            }} />
+          </div>
         </div>
         
         {/* Receipt Container - clips the receipt */}
@@ -201,17 +255,39 @@ const ReceiptCalendar = () => {
           overflow: isPrinting ? 'hidden' : 'visible',
           transition: isPrinting ? 'none' : 'height 0.3s ease-out',
         }}>
+          {/* Confetti */}
+          {confetti.map(c => (
+            <div
+              key={c.id}
+              style={{
+                position: 'absolute',
+                left: `${c.x}%`,
+                top: '-20px',
+                width: `${c.size}px`,
+                height: `${c.size}px`,
+                background: c.color,
+                borderRadius: c.size > 6 ? '2px' : '50%',
+                transform: `rotate(${c.rotation}deg)`,
+                animation: `confettiFall 2.5s ease-out ${c.delay}s forwards`,
+                zIndex: 100,
+              }}
+            />
+          ))}
+
           {/* The Receipt */}
-          <div style={{
-            background: '#f5f2e8',
-            width: '340px',
-            margin: '0 auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.1)',
-            position: 'relative',
-            borderRadius: '0 0 2px 2px',
-            transform: isPrinting ? `translateY(${-receiptHeight + (printProgress / 100) * receiptHeight}px)` : 'translateY(0)',
-            
-          }}>
+          <div
+            style={{
+              background: '#f5f2e8',
+              width: '340px',
+              margin: '0 auto',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.1)',
+              position: 'relative',
+              borderRadius: '0 0 2px 2px',
+              transform: isPrinting
+                ? `translateY(${-receiptHeight + (printProgress / 100) * receiptHeight}px)`
+                : 'translateY(0)',
+            }}
+          >
         
         <div style={{ padding: '20px 24px' }}>
           {/* Store header */}
@@ -392,56 +468,70 @@ const ReceiptCalendar = () => {
             gap: '2px',
             pointerEvents: isPrinting ? 'none' : 'auto',
           }}>
-            {calendarDays.map((day, index) => (
-              <div
-                key={index}
-                onClick={() => day && setSelectedDate(day)}
-                style={{
-                  textAlign: 'center',
-                  padding: '8px 2px',
-                  cursor: day ? 'pointer' : 'default',
-                  position: 'relative',
-                  background: isToday(day) 
-                    ? '#1a1a1a' 
-                    : selectedDate === day 
-                      ? '#e0ddd3'
-                      : 'transparent',
-                  color: isToday(day) 
-                    ? '#f5f2e8' 
-                    : day 
-                      ? '#333' 
-                      : 'transparent',
-                  transition: 'all 0.15s',
-                  borderRadius: '2px',
-                }}
-                onMouseOver={(e) => {
-                  if (day && !isToday(day)) {
-                    e.currentTarget.style.background = '#e8e5db';
-                  }
-                }}
-                onMouseOut={(e) => {
-                  if (day && !isToday(day) && selectedDate !== day) {
-                    e.currentTarget.style.background = 'transparent';
-                  }
-                }}
-              >
-                <div style={{
-                  fontSize: '14px',
-                  fontWeight: isToday(day) ? 'bold' : 'normal',
-                }}>
-                  {day ? day.toString().padStart(2, '0') : ''}
-                </div>
-                {day && (
+            {calendarDays.map((day, index) => {
+              const holiday = isHoliday(day);
+              return (
+                <div
+                  key={index}
+                  onClick={() => {
+                    if (day) {
+                      setSelectedDate(day);
+                      if (holiday) triggerConfetti();
+                    }
+                  }}
+                  style={{
+                    textAlign: 'center',
+                    padding: '8px 2px',
+                    cursor: day ? 'pointer' : 'default',
+                    position: 'relative',
+                    background: isToday(day)
+                      ? '#1a1a1a'
+                      : holiday
+                        ? '#fff3e0'
+                        : selectedDate === day
+                          ? '#e0ddd3'
+                          : 'transparent',
+                    color: isToday(day)
+                      ? '#f5f2e8'
+                      : holiday
+                        ? '#e65100'
+                        : day
+                          ? '#333'
+                          : 'transparent',
+                    transition: 'all 0.15s',
+                    borderRadius: '2px',
+                    border: holiday ? '1px dashed #ffab40' : 'none',
+                  }}
+                  onMouseOver={(e) => {
+                    if (day && !isToday(day)) {
+                      e.currentTarget.style.background = holiday ? '#ffe0b2' : '#e8e5db';
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (day && !isToday(day) && selectedDate !== day) {
+                      e.currentTarget.style.background = holiday ? '#fff3e0' : 'transparent';
+                    }
+                  }}
+                  title={holiday ? holiday.name : ''}
+                >
                   <div style={{
-                    fontSize: '8px',
-                    color: isToday(day) ? '#aaa' : '#999',
-                    marginTop: '2px',
+                    fontSize: '14px',
+                    fontWeight: isToday(day) || holiday ? 'bold' : 'normal',
                   }}>
-                    {formatPrice(day)}
+                    {day ? day.toString().padStart(2, '0') : ''}
                   </div>
-                )}
-              </div>
-            ))}
+                  {day && (
+                    <div style={{
+                      fontSize: '8px',
+                      color: isToday(day) ? '#aaa' : holiday ? '#ff8a65' : '#999',
+                      marginTop: '2px',
+                    }}>
+                      {holiday ? '★' : formatPrice(day)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           
           {/* Divider */}
@@ -499,24 +589,38 @@ const ReceiptCalendar = () => {
             <span>{getDaysInMonth(currentDate)}</span>
           </div>
           
-          {selectedDate && (
-            <div style={{
-              background: '#e8e5db',
-              padding: '12px',
-              marginTop: '12px',
-              border: '1px dashed #999',
-            }}>
-              <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>
-                SELECTED ITEM:
+          {selectedDate && (() => {
+            const selectedHoliday = isHoliday(selectedDate);
+            return (
+              <div style={{
+                background: selectedHoliday ? '#fff3e0' : '#e8e5db',
+                padding: '12px',
+                marginTop: '12px',
+                border: selectedHoliday ? '2px dashed #ffab40' : '1px dashed #999',
+              }}>
+                <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>
+                  SELECTED ITEM:
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+                  {months[currentDate.getMonth()]} {selectedDate}, {currentDate.getFullYear()}
+                </div>
+                {selectedHoliday && (
+                  <div style={{
+                    fontSize: '12px',
+                    color: '#e65100',
+                    marginTop: '6px',
+                    fontWeight: 'bold',
+                    letterSpacing: '1px',
+                  }}>
+                    {selectedHoliday.name.toUpperCase()}
+                  </div>
+                )}
+                <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
+                  UNIT PRICE: {formatPrice(selectedDate)}
+                </div>
               </div>
-              <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                {months[currentDate.getMonth()]} {selectedDate}, {currentDate.getFullYear()}
-              </div>
-              <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
-                UNIT PRICE: {formatPrice(selectedDate)}
-              </div>
-            </div>
-          )}
+            );
+          })()}
           
           {/* Barcode */}
           <div style={{
@@ -644,6 +748,16 @@ const ReceiptCalendar = () => {
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.4; }
+        }
+        @keyframes confettiFall {
+          0% {
+            transform: translateY(0) rotate(0deg);
+            opacity: 1;
+          }
+          100% {
+            transform: translateY(800px) rotate(720deg);
+            opacity: 0;
+          }
         }
       `}</style>
     </div>
