@@ -7,6 +7,34 @@ const ReceiptCalendar = () => {
   const [printProgress, setPrintProgress] = useState(0);
   const [showPrinter, setShowPrinter] = useState(true);
   const [confetti, setConfetti] = useState([]);
+  const [fortuneMessage, setFortuneMessage] = useState(null);
+
+  // Fortune cookie messages / positive quotes
+  const fortunes = [
+    "Time you enjoy wasting is not wasted time.",
+    "Today is a gift. That's why it's called the present.",
+    "The best time to plant a tree was yesterday. The second best time is now.",
+    "Your future is created by what you do today.",
+    "Every day is a second chance.",
+    "Be the energy you want to attract.",
+    "Small steps every day lead to big changes.",
+    "You are exactly where you need to be.",
+    "Good things take time. Be patient.",
+    "Your only limit is your mind.",
+    "Make today so awesome that yesterday gets jealous.",
+    "The secret of getting ahead is getting started.",
+    "Believe you can and you're halfway there.",
+    "Stars can't shine without darkness.",
+    "What you seek is seeking you.",
+    "Be a voice, not an echo.",
+    "Dream big. Start small. Act now.",
+    "Happiness is homemade.",
+  ];
+
+  const revealFortune = () => {
+    const randomFortune = fortunes[Math.floor(Math.random() * fortunes.length)];
+    setFortuneMessage(randomFortune);
+  };
 
   // US Holidays (month is 0-indexed) - dates for 2026
   const usHolidays = [
@@ -51,30 +79,35 @@ const ReceiptCalendar = () => {
                   'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
   const days = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
   
-  // Printing animation
+  // Printing animation - using requestAnimationFrame for smooth 60fps
   useEffect(() => {
     if (isPrinting) {
       const duration = 4500; // 4.5 seconds total
-      const steps = 90;
-      const interval = duration / steps;
-      let currentStep = 0;
-      
-      const timer = setInterval(() => {
-        currentStep++;
-        // Ease-in curve: starts very slow, gradually speeds up
-        const linearProgress = currentStep / steps;
-        // Using ease-in cubic for gentle start
-        const easedProgress = Math.pow(linearProgress, 2.5);
-        setPrintProgress(Math.min(easedProgress * 100, 100));
-        
-        if (currentStep >= steps) {
-          clearInterval(timer);
+      let startTime = null;
+      let animationId = null;
+
+      const animate = (timestamp) => {
+        if (!startTime) startTime = timestamp;
+        const elapsed = timestamp - startTime;
+        const linearProgress = Math.min(elapsed / duration, 1);
+
+        // Very slow start, then gradually speeds up
+        const easedProgress = Math.pow(linearProgress, 3);
+        setPrintProgress(easedProgress * 100);
+
+        if (linearProgress < 1) {
+          animationId = requestAnimationFrame(animate);
+        } else {
           setPrintProgress(100);
           setTimeout(() => setIsPrinting(false), 200);
         }
-      }, interval);
-      
-      return () => clearInterval(timer);
+      };
+
+      animationId = requestAnimationFrame(animate);
+
+      return () => {
+        if (animationId) cancelAnimationFrame(animationId);
+      };
     }
   }, [isPrinting]);
   
@@ -82,6 +115,8 @@ const ReceiptCalendar = () => {
     setPrintProgress(0);
     setIsPrinting(true);
     setShowPrinter(true);
+    setSelectedDate(null);
+    setFortuneMessage(null);
   };
   
   const getDaysInMonth = (date) => {
@@ -167,7 +202,7 @@ const ReceiptCalendar = () => {
   };
 
   const calendarDays = generateCalendarDays();
-  const receiptHeight = 1000; // Increased height to include torn edge and shadow
+  const receiptHeight = 1200; // Height for full receipt including torn edge
   
   return (
     <div style={{
@@ -252,8 +287,7 @@ const ReceiptCalendar = () => {
         <div style={{
           position: 'relative',
           height: isPrinting ? `${(printProgress / 100) * receiptHeight}px` : 'auto',
-          overflow: isPrinting ? 'hidden' : 'visible',
-          transition: isPrinting ? 'none' : 'height 0.3s ease-out',
+          overflow: 'hidden',
         }}>
           {/* Confetti */}
           {confetti.map(c => (
@@ -288,6 +322,20 @@ const ReceiptCalendar = () => {
                 : 'translateY(0)',
             }}
           >
+            {/* Paper texture overlay */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                opacity: 0.08,
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+                pointerEvents: 'none',
+                mixBlendMode: 'multiply',
+              }}
+            />
         
         <div style={{ padding: '20px 24px' }}>
           {/* Store header */}
@@ -476,6 +524,7 @@ const ReceiptCalendar = () => {
                   onClick={() => {
                     if (day) {
                       setSelectedDate(day);
+                      setFortuneMessage(null);
                       if (holiday) triggerConfetti();
                     }
                   }}
@@ -623,13 +672,21 @@ const ReceiptCalendar = () => {
           })()}
           
           {/* Barcode */}
-          <div style={{
-            marginTop: '20px',
-            textAlign: 'center',
-          }}>
-            <svg 
-              width="100%" 
-              height="50" 
+          <div
+            style={{
+              marginTop: '20px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'transform 0.2s',
+            }}
+            onClick={revealFortune}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            title="Click for a fortune!"
+          >
+            <svg
+              width="100%"
+              height="50"
               viewBox="0 0 292 50"
               preserveAspectRatio="none"
               style={{ display: 'block' }}
@@ -668,6 +725,36 @@ const ReceiptCalendar = () => {
               {currentDate.getFullYear()}{(currentDate.getMonth() + 1).toString().padStart(2, '0')}{getDaysInMonth(currentDate)}
             </div>
           </div>
+
+          {/* Fortune Message */}
+          {fortuneMessage && (
+            <div style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: 'linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%)',
+              border: '1px dashed #d4a574',
+              borderRadius: '4px',
+              textAlign: 'center',
+              animation: 'fadeIn 0.3s ease-out',
+            }}>
+              <div style={{
+                fontSize: '9px',
+                color: '#a67c52',
+                letterSpacing: '2px',
+                marginBottom: '6px',
+              }}>
+                YOUR FORTUNE
+              </div>
+              <div style={{
+                fontSize: '11px',
+                color: '#5c4033',
+                fontStyle: 'italic',
+                lineHeight: '1.5',
+              }}>
+                "{fortuneMessage}"
+              </div>
+            </div>
+          )}
           
           {/* Footer messages */}
           <div style={{
@@ -757,6 +844,16 @@ const ReceiptCalendar = () => {
           100% {
             transform: translateY(800px) rotate(720deg);
             opacity: 0;
+          }
+        }
+        @keyframes fadeIn {
+          0% {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
           }
         }
       `}</style>
