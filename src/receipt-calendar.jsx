@@ -863,7 +863,7 @@ const ReceiptCalendar = () => {
                         <span>${dateTotal.toFixed(2)}</span>
                       </div>
                     </div>
-                  ) : (
+                  ) : !showAddExpense && (
                     <div style={{ fontSize: '10px', color: '#999', textAlign: 'center', padding: '10px' }}>
                       No expenses recorded
                     </div>
