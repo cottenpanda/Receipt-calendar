@@ -9,6 +9,146 @@ const ReceiptCalendar = () => {
   const [confetti, setConfetti] = useState([]);
   const [fortuneMessage, setFortuneMessage] = useState(null);
 
+  // Expense tracking state
+  const [expenses, setExpenses] = useState(() => {
+    const saved = localStorage.getItem('receiptCalendarExpenses');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [showAddExpense, setShowAddExpense] = useState(false);
+  const [newExpense, setNewExpense] = useState({
+    storeName: '',
+    items: [{ name: '', price: '' }],
+  });
+
+  // Save expenses to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('receiptCalendarExpenses', JSON.stringify(expenses));
+  }, [expenses]);
+
+  // Get expense key for a date
+  const getExpenseKey = (year, month, day) => `${year}-${month}-${day}`;
+
+  // Get expenses for selected date
+  const getExpensesForDate = (day) => {
+    if (!day) return [];
+    const key = getExpenseKey(currentDate.getFullYear(), currentDate.getMonth(), day);
+    return expenses[key] || [];
+  };
+
+  // Get total for a date
+  const getTotalForDate = (day) => {
+    const dayExpenses = getExpensesForDate(day);
+    return dayExpenses.reduce((sum, exp) => sum + exp.items.reduce((s, item) => s + (parseFloat(item.price) || 0), 0), 0);
+  };
+
+  // Get monthly total (includes fake prices for past dates without real expenses)
+  const getMonthlyTotal = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let total = 0;
+
+    for (let day = 1; day <= getDaysInMonth(currentDate); day++) {
+      const key = getExpenseKey(year, month, day);
+      const dayExpenses = expenses[key] || [];
+      const checkDate = new Date(year, month, day);
+
+      if (dayExpenses.length > 0) {
+        // Use real expenses
+        dayExpenses.forEach(exp => {
+          exp.items.forEach(item => {
+            total += parseFloat(item.price) || 0;
+          });
+        });
+      } else if (checkDate <= today) {
+        // Use fake price for past dates without real expenses
+        total += day * 0.99;
+      }
+    }
+    return total;
+  };
+
+  // Get monthly transaction count (includes fake transaction for past dates without real expenses)
+  const getMonthlyTransactionCount = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let count = 0;
+
+    for (let day = 1; day <= getDaysInMonth(currentDate); day++) {
+      const key = getExpenseKey(year, month, day);
+      const dayExpenses = expenses[key] || [];
+      const checkDate = new Date(year, month, day);
+
+      if (dayExpenses.length > 0) {
+        // Count real transactions
+        count += dayExpenses.length;
+      } else if (checkDate <= today) {
+        // Count 1 fake transaction for past dates
+        count += 1;
+      }
+    }
+    return count;
+  };
+
+  // Add new expense
+  const addExpense = () => {
+    if (!selectedDate || !newExpense.storeName) return;
+
+    const key = getExpenseKey(currentDate.getFullYear(), currentDate.getMonth(), selectedDate);
+    const expense = {
+      id: Date.now(),
+      storeName: newExpense.storeName,
+      items: newExpense.items.filter(item => item.name && item.price),
+      timestamp: new Date().toISOString(),
+    };
+
+    setExpenses(prev => ({
+      ...prev,
+      [key]: [...(prev[key] || []), expense],
+    }));
+
+    setNewExpense({ storeName: '', items: [{ name: '', price: '' }] });
+    setShowAddExpense(false);
+  };
+
+  // Delete expense
+  const deleteExpense = (expenseId) => {
+    const key = getExpenseKey(currentDate.getFullYear(), currentDate.getMonth(), selectedDate);
+    setExpenses(prev => ({
+      ...prev,
+      [key]: (prev[key] || []).filter(exp => exp.id !== expenseId),
+    }));
+  };
+
+  // Add item row to new expense
+  const addItemRow = () => {
+    setNewExpense(prev => ({
+      ...prev,
+      items: [...prev.items, { name: '', price: '' }],
+    }));
+  };
+
+  // Update item in new expense
+  const updateItem = (index, field, value) => {
+    setNewExpense(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) => i === index ? { ...item, [field]: value } : item),
+    }));
+  };
+
+  // Remove item row
+  const removeItemRow = (index) => {
+    if (newExpense.items.length > 1) {
+      setNewExpense(prev => ({
+        ...prev,
+        items: prev.items.filter((_, i) => i !== index),
+      }));
+    }
+  };
+
   // Fortune cookie messages / positive quotes
   const fortunes = [
     "Time you enjoy wasting is not wasted time.",
@@ -145,19 +285,29 @@ const ReceiptCalendar = () => {
   
   const prevMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1));
+    setSelectedDate(null);
   };
-  
+
   const nextMonth = () => {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
+    setSelectedDate(null);
   };
   
   const isToday = (day) => {
     const today = new Date();
-    return day === today.getDate() && 
-           currentDate.getMonth() === today.getMonth() && 
+    return day === today.getDate() &&
+           currentDate.getMonth() === today.getMonth() &&
            currentDate.getFullYear() === today.getFullYear();
   };
-  
+
+  const isFutureDate = (day) => {
+    if (!day) return false;
+    const today = new Date();
+    const checkDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    today.setHours(0, 0, 0, 0);
+    return checkDate > today;
+  };
+
   const formatPrice = (day) => {
     if (!day) return '';
     return `$${(day * 0.99).toFixed(2)}`;
@@ -518,6 +668,8 @@ const ReceiptCalendar = () => {
           }}>
             {calendarDays.map((day, index) => {
               const holiday = isHoliday(day);
+              const dayTotal = getTotalForDate(day);
+              const hasExpenses = dayTotal > 0;
               return (
                 <div
                   key={index}
@@ -525,6 +677,7 @@ const ReceiptCalendar = () => {
                     if (day) {
                       setSelectedDate(day);
                       setFortuneMessage(null);
+                      setShowAddExpense(false);
                       if (holiday) triggerConfetti();
                     }
                   }}
@@ -535,7 +688,7 @@ const ReceiptCalendar = () => {
                     position: 'relative',
                     background: isToday(day)
                       ? '#1a1a1a'
-                      : holiday
+                      : hasExpenses
                         ? '#fff3e0'
                         : selectedDate === day
                           ? '#e0ddd3'
@@ -543,25 +696,25 @@ const ReceiptCalendar = () => {
                     color: isToday(day)
                       ? '#f5f2e8'
                       : holiday
-                        ? '#e65100'
+                        ? '#2e7d32'
                         : day
                           ? '#333'
                           : 'transparent',
                     transition: 'all 0.15s',
                     borderRadius: '2px',
-                    border: holiday ? '1px dashed #ffab40' : 'none',
+                    border: hasExpenses && !isToday(day) ? '1px dashed #ffab40' : 'none',
                   }}
                   onMouseOver={(e) => {
                     if (day && !isToday(day)) {
-                      e.currentTarget.style.background = holiday ? '#ffe0b2' : '#e8e5db';
+                      e.currentTarget.style.background = hasExpenses ? '#ffe0b2' : '#e8e5db';
                     }
                   }}
                   onMouseOut={(e) => {
                     if (day && !isToday(day) && selectedDate !== day) {
-                      e.currentTarget.style.background = holiday ? '#fff3e0' : 'transparent';
+                      e.currentTarget.style.background = hasExpenses ? '#fff3e0' : 'transparent';
                     }
                   }}
-                  title={holiday ? holiday.name : ''}
+                  title={holiday ? holiday.name : hasExpenses ? `$${dayTotal.toFixed(2)} spent` : ''}
                 >
                   <div style={{
                     fontSize: '14px',
@@ -572,10 +725,11 @@ const ReceiptCalendar = () => {
                   {day && (
                     <div style={{
                       fontSize: '8px',
-                      color: isToday(day) ? '#aaa' : holiday ? '#ff8a65' : '#999',
+                      color: isToday(day) ? (hasExpenses ? '#fff' : '#aaa') : hasExpenses ? '#e65100' : '#999',
                       marginTop: '2px',
+                      fontWeight: hasExpenses ? 'bold' : 'normal',
                     }}>
-                      {holiday ? '★' : formatPrice(day)}
+                      {hasExpenses ? `$${dayTotal.toFixed(0)}` : isFutureDate(day) ? '' : formatPrice(day)}
                     </div>
                   )}
                 </div>
@@ -583,80 +737,25 @@ const ReceiptCalendar = () => {
             })}
           </div>
           
-          {/* Divider */}
-          <div style={{
-            borderTop: '1px dashed #999',
-            margin: '16px 0 12px',
-          }} />
-          
-          {/* Subtotal area */}
-          <div style={{
-            fontSize: '11px',
-            color: '#444',
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '4px',
-            }}>
-              <span>DAYS THIS MONTH:</span>
-              <span>{getDaysInMonth(currentDate)}</span>
-            </div>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '4px',
-            }}>
-              <span>WEEKENDS:</span>
-              <span>{Math.floor(getDaysInMonth(currentDate) / 7) * 2 + (getDaysInMonth(currentDate) % 7 > 0 ? 1 : 0)}</span>
-            </div>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '4px',
-            }}>
-              <span>WEEKS:</span>
-              <span>{Math.ceil((getDaysInMonth(currentDate) + getFirstDayOfMonth(currentDate)) / 7)}</span>
-            </div>
-          </div>
-          
-          {/* Divider */}
-          <div style={{
-            borderTop: '2px solid #333',
-            margin: '12px 0',
-          }} />
-          
-          {/* Total */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            fontSize: '16px',
-            fontWeight: 'bold',
-            marginBottom: '8px',
-          }}>
-            <span>TOTAL DAYS:</span>
-            <span>{getDaysInMonth(currentDate)}</span>
-          </div>
-          
+          {/* Selected Date Section */}
           {selectedDate && (() => {
             const selectedHoliday = isHoliday(selectedDate);
+            const dateExpenses = getExpensesForDate(selectedDate);
+            const dateTotal = getTotalForDate(selectedDate);
             return (
               <div style={{
-                background: selectedHoliday ? '#fff3e0' : '#e8e5db',
+                background: '#e8e5db',
                 padding: '12px',
                 marginTop: '12px',
-                border: selectedHoliday ? '2px dashed #ffab40' : '1px dashed #999',
+                border: '1px dashed #999',
               }}>
-                <div style={{ fontSize: '11px', color: '#666', marginBottom: '4px' }}>
-                  SELECTED ITEM:
-                </div>
                 <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
                   {months[currentDate.getMonth()]} {selectedDate}, {currentDate.getFullYear()}
                 </div>
                 {selectedHoliday && (
                   <div style={{
                     fontSize: '12px',
-                    color: '#e65100',
+                    color: '#2e7d32',
                     marginTop: '6px',
                     fontWeight: 'bold',
                     letterSpacing: '1px',
@@ -664,13 +763,153 @@ const ReceiptCalendar = () => {
                     {selectedHoliday.name.toUpperCase()}
                   </div>
                 )}
-                <div style={{ fontSize: '10px', color: '#888', marginTop: '4px' }}>
-                  UNIT PRICE: {formatPrice(selectedDate)}
+
+                {/* Expense Section */}
+                <div style={{ marginTop: '12px', borderTop: '1px dashed #999', paddingTop: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '11px', color: '#666' }}>EXPENSES:</span>
+                    <button
+                      onClick={() => setShowAddExpense(!showAddExpense)}
+                      style={{
+                        background: 'none',
+                        border: '1px solid #666',
+                        padding: '2px 8px',
+                        fontSize: '10px',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      {showAddExpense ? 'CANCEL' : '+ ADD'}
+                    </button>
+                  </div>
+
+                  {/* Add Expense Form */}
+                  {showAddExpense && (
+                    <div style={{ background: '#fff', padding: '10px', marginBottom: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
+                      <input
+                        type="text"
+                        placeholder="Store name"
+                        value={newExpense.storeName}
+                        onChange={(e) => setNewExpense(prev => ({ ...prev, storeName: e.target.value }))}
+                        style={{
+                          width: '100%',
+                          padding: '6px',
+                          marginBottom: '8px',
+                          border: '1px solid #ccc',
+                          fontFamily: 'inherit',
+                          fontSize: '11px',
+                          boxSizing: 'border-box',
+                          outline: 'none',
+                        }}
+                        onFocus={(e) => e.target.style.borderColor = '#333'}
+                        onBlur={(e) => e.target.style.borderColor = '#ccc'}
+                      />
+                      {newExpense.items.map((item, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
+                          <input
+                            type="text"
+                            placeholder="Item"
+                            value={item.name}
+                            onChange={(e) => updateItem(idx, 'name', e.target.value)}
+                            style={{ flex: 2, padding: '4px', fontSize: '10px', fontFamily: 'inherit', border: '1px solid #ccc', boxSizing: 'border-box', minWidth: 0, outline: 'none' }}
+                            onFocus={(e) => e.target.style.borderColor = '#333'}
+                            onBlur={(e) => e.target.style.borderColor = '#ccc'}
+                          />
+                          <input
+                            type="number"
+                            placeholder="$"
+                            value={item.price}
+                            onChange={(e) => updateItem(idx, 'price', e.target.value)}
+                            style={{ flex: 1, padding: '4px', fontSize: '10px', fontFamily: 'inherit', border: '1px solid #ccc', boxSizing: 'border-box', minWidth: 0, outline: 'none' }}
+                            onFocus={(e) => e.target.style.borderColor = '#333'}
+                            onBlur={(e) => e.target.style.borderColor = '#ccc'}
+                          />
+                          {newExpense.items.length > 1 && (
+                            <button onClick={() => removeItemRow(idx)} style={{ padding: '4px 8px', fontSize: '10px', cursor: 'pointer', border: '1px solid #ccc', background: '#fff', flexShrink: 0 }}>×</button>
+                          )}
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
+                        <button onClick={addItemRow} style={{ flex: 1, padding: '4px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit', border: '1px solid #666', background: '#fff' }}>+ ITEM</button>
+                        <button onClick={addExpense} style={{ flex: 1, padding: '4px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit', border: '1px solid #333', background: '#333', color: '#fff' }}>SAVE</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Expense List */}
+                  {dateExpenses.length > 0 ? (
+                    <div>
+                      {dateExpenses.map((expense) => (
+                        <div key={expense.id} style={{ background: '#fff', padding: '8px', marginBottom: '6px', border: '1px solid #ddd' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 'bold' }}>{expense.storeName}</span>
+                            <button
+                              onClick={() => deleteExpense(expense.id)}
+                              style={{ background: 'none', border: 'none', color: '#999', cursor: 'pointer', fontSize: '12px' }}
+                            >
+                              ×
+                            </button>
+                          </div>
+                          {expense.items.map((item, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#666', marginTop: '4px' }}>
+                              <span>{item.name}</span>
+                              <span>${parseFloat(item.price).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', marginTop: '8px', paddingTop: '8px', borderTop: '2px solid #333' }}>
+                        <span>DAY TOTAL:</span>
+                        <span>${dateTotal.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '10px', color: '#999', textAlign: 'center', padding: '10px' }}>
+                      No expenses recorded
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })()}
-          
+
+          {/* Monthly Summary */}
+          <div style={{
+            borderTop: '1px dashed #999',
+            margin: '16px 0 12px',
+            paddingTop: '12px',
+          }}>
+            <div style={{
+              fontSize: '11px',
+              color: '#444',
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: '4px',
+              }}>
+                <span>TRANSACTIONS:</span>
+                <span>{getMonthlyTransactionCount()}</span>
+              </div>
+            </div>
+
+            <div style={{
+              borderTop: '2px solid #333',
+              margin: '12px 0 8px',
+              paddingTop: '12px',
+            }}>
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontSize: '16px',
+                fontWeight: 'bold',
+              }}>
+                <span>MONTHLY TOTAL:</span>
+                <span>${getMonthlyTotal().toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
           {/* Barcode */}
           <div
             style={{
