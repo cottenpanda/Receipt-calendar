@@ -3,6 +3,64 @@ import React, { useState, useEffect, useRef } from 'react';
 // Use the same host as the page, but port 3001 for API
 const API_URL = `http://${window.location.hostname}:3001`;
 
+// Expense categories
+const CATEGORIES = [
+  { id: 'food', name: 'Food & Dining', color: '#4caf50' },
+  { id: 'grocery', name: 'Grocery', color: '#8bc34a' },
+  { id: 'coffee', name: 'Coffee & Drinks', color: '#795548' },
+  { id: 'shopping', name: 'Shopping', color: '#e91e63' },
+  { id: 'healthcare', name: 'Healthcare', color: '#f44336' },
+  { id: 'transport', name: 'Transport', color: '#2196f3' },
+  { id: 'entertainment', name: 'Entertainment', color: '#9c27b0' },
+  { id: 'skincare', name: 'Skincare & Beauty', color: '#ff9800' },
+  { id: 'utilities', name: 'Utilities', color: '#607d8b' },
+  { id: 'other', name: 'Other', color: '#9e9e9e' },
+];
+
+// Auto-detect category from store name
+const detectCategory = (storeName) => {
+  const name = storeName.toLowerCase();
+
+  // Food & Dining
+  if (/chipotle|mcdonald|burger|pizza|restaurant|grill|kitchen|diner|cafe|bistro|sushi|thai|chinese|mexican|indian|panera|subway|wendy|taco/i.test(name)) {
+    return 'food';
+  }
+  // Coffee
+  if (/starbucks|coffee|dunkin|peet|cafe|tea|boba/i.test(name)) {
+    return 'coffee';
+  }
+  // Grocery
+  if (/whole foods|trader joe|safeway|kroger|walmart|target|costco|grocery|market|fresh|aldi|publix|wegmans|amazon fresh/i.test(name)) {
+    return 'grocery';
+  }
+  // Healthcare
+  if (/cvs|walgreens|pharmacy|rite aid|drug|medical|doctor|clinic|hospital/i.test(name)) {
+    return 'healthcare';
+  }
+  // Skincare & Beauty
+  if (/sephora|ulta|beauty|skincare|cosmetic|salon|spa|nail|hair/i.test(name)) {
+    return 'skincare';
+  }
+  // Shopping
+  if (/amazon|nordstrom|macy|gap|zara|h&m|uniqlo|nike|adidas|apple|best buy|mall|shop|store|outlet/i.test(name)) {
+    return 'shopping';
+  }
+  // Transport
+  if (/uber|lyft|taxi|gas|shell|chevron|exxon|parking|transit|metro/i.test(name)) {
+    return 'transport';
+  }
+  // Entertainment
+  if (/netflix|spotify|movie|theater|cinema|concert|game|steam|playstation|xbox/i.test(name)) {
+    return 'entertainment';
+  }
+  // Utilities
+  if (/electric|water|gas|internet|phone|verizon|at&t|comcast|utility/i.test(name)) {
+    return 'utilities';
+  }
+
+  return 'other';
+};
+
 const ReceiptCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -20,9 +78,11 @@ const ReceiptCalendar = () => {
   const [showAddExpense, setShowAddExpense] = useState(false);
   const [newExpense, setNewExpense] = useState({
     storeName: '',
+    category: 'other',
     items: [{ name: '', price: '' }],
   });
   const [isScanning, setIsScanning] = useState(false);
+  const [showMonthlyBreakdown, setShowMonthlyBreakdown] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [scanPreview, setScanPreview] = useState(null);
   const fileInputRef = useRef(null);
@@ -60,9 +120,11 @@ const ReceiptCalendar = () => {
 
       const data = await response.json();
 
-      // Auto-fill the form
+      // Auto-fill the form with auto-detected category
+      const storeName = data.storeName || '';
       setNewExpense({
-        storeName: data.storeName || '',
+        storeName: storeName,
+        category: detectCategory(storeName),
         items: data.items?.length > 0
           ? data.items.map(item => ({ name: item.name, price: item.price?.toString() || '' }))
           : [{ name: '', price: '' }],
@@ -155,19 +217,62 @@ const ReceiptCalendar = () => {
     return count;
   };
 
+  // Get monthly breakdown by category
+  const getMonthlyBreakdown = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const breakdown = {};
+    CATEGORIES.forEach(cat => {
+      breakdown[cat.id] = 0;
+    });
+
+    for (let day = 1; day <= getDaysInMonth(currentDate); day++) {
+      const key = getExpenseKey(year, month, day);
+      const dayExpenses = expenses[key] || [];
+      const checkDate = new Date(year, month, day);
+
+      if (dayExpenses.length > 0) {
+        // Use real expenses
+        dayExpenses.forEach(exp => {
+          const category = exp.category || 'other';
+          const total = exp.items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0);
+          breakdown[category] = (breakdown[category] || 0) + total;
+        });
+      } else if (checkDate < today) {
+        // Use fake expense category for past dates
+        const fakeExp = getFakeExpensesForDate(day)[0];
+        breakdown[fakeExp.category] = (breakdown[fakeExp.category] || 0) + (day * 0.99);
+      }
+    }
+
+    // Convert to sorted array with percentages
+    const total = Object.values(breakdown).reduce((sum, val) => sum + val, 0);
+    return CATEGORIES
+      .map(cat => ({
+        ...cat,
+        amount: breakdown[cat.id] || 0,
+        percentage: total > 0 ? ((breakdown[cat.id] || 0) / total) * 100 : 0,
+      }))
+      .filter(cat => cat.amount > 0)
+      .sort((a, b) => b.amount - a.amount);
+  };
+
   // Generate fake expenses for past dates
   const getFakeExpensesForDate = (day) => {
     const fakeStores = [
-      { name: 'Trader Joe\'s', items: ['Organic Milk', 'Sourdough Bread', 'Avocados', 'Greek Yogurt', 'Bananas'] },
-      { name: 'Starbucks', items: ['Latte', 'Croissant', 'Iced Coffee', 'Breakfast Sandwich'] },
-      { name: 'Target', items: ['Paper Towels', 'Shampoo', 'Snacks', 'Cleaning Supplies'] },
-      { name: 'Whole Foods', items: ['Salmon Fillet', 'Quinoa', 'Kale', 'Almond Butter'] },
-      { name: 'Chipotle', items: ['Burrito Bowl', 'Chips & Guac', 'Drink'] },
-      { name: 'CVS', items: ['Vitamins', 'Toothpaste', 'Band-Aids', 'Lotion'] },
-      { name: 'Uber Eats', items: ['Pad Thai', 'Spring Rolls', 'Delivery Fee'] },
-      { name: 'Amazon Fresh', items: ['Coffee Beans', 'Pasta', 'Olive Oil', 'Cereal'] },
-      { name: 'Safeway', items: ['Chicken Breast', 'Rice', 'Vegetables', 'Eggs'] },
-      { name: 'Panera Bread', items: ['Soup & Salad Combo', 'Baguette', 'Iced Tea'] },
+      { name: 'Trader Joe\'s', category: 'grocery', items: ['Organic Milk', 'Sourdough Bread', 'Avocados', 'Greek Yogurt', 'Bananas'] },
+      { name: 'Starbucks', category: 'coffee', items: ['Latte', 'Croissant', 'Iced Coffee', 'Breakfast Sandwich'] },
+      { name: 'Target', category: 'shopping', items: ['Paper Towels', 'Shampoo', 'Snacks', 'Cleaning Supplies'] },
+      { name: 'Whole Foods', category: 'grocery', items: ['Salmon Fillet', 'Quinoa', 'Kale', 'Almond Butter'] },
+      { name: 'Chipotle', category: 'food', items: ['Burrito Bowl', 'Chips & Guac', 'Drink'] },
+      { name: 'CVS', category: 'healthcare', items: ['Vitamins', 'Toothpaste', 'Band-Aids', 'Lotion'] },
+      { name: 'Uber Eats', category: 'food', items: ['Pad Thai', 'Spring Rolls', 'Delivery Fee'] },
+      { name: 'Amazon Fresh', category: 'grocery', items: ['Coffee Beans', 'Pasta', 'Olive Oil', 'Cereal'] },
+      { name: 'Safeway', category: 'grocery', items: ['Chicken Breast', 'Rice', 'Vegetables', 'Eggs'] },
+      { name: 'Panera Bread', category: 'food', items: ['Soup & Salad Combo', 'Baguette', 'Iced Tea'] },
     ];
 
     // Use day as seed for consistent fake data
@@ -191,6 +296,7 @@ const ReceiptCalendar = () => {
     return [{
       id: `fake-${day}`,
       storeName: store.name,
+      category: store.category,
       items: items,
       isFake: true,
     }];
@@ -214,6 +320,7 @@ const ReceiptCalendar = () => {
     const expense = {
       id: Date.now(),
       storeName: newExpense.storeName,
+      category: newExpense.category || 'other',
       items: newExpense.items.filter(item => item.name && item.price),
       timestamp: new Date().toISOString(),
     };
@@ -223,7 +330,7 @@ const ReceiptCalendar = () => {
       [key]: [...(prev[key] || []), expense],
     }));
 
-    setNewExpense({ storeName: '', items: [{ name: '', price: '' }] });
+    setNewExpense({ storeName: '', category: 'other', items: [{ name: '', price: '' }] });
     setShowAddExpense(false);
   };
 
@@ -991,7 +1098,14 @@ const ReceiptCalendar = () => {
                         type="text"
                         placeholder="Store name"
                         value={newExpense.storeName}
-                        onChange={(e) => setNewExpense(prev => ({ ...prev, storeName: e.target.value }))}
+                        onChange={(e) => {
+                          const storeName = e.target.value;
+                          setNewExpense(prev => ({
+                            ...prev,
+                            storeName: storeName,
+                            category: detectCategory(storeName),
+                          }));
+                        }}
                         style={{
                           width: '100%',
                           padding: '6px',
@@ -1005,6 +1119,27 @@ const ReceiptCalendar = () => {
                         onFocus={(e) => e.target.style.borderColor = '#333'}
                         onBlur={(e) => e.target.style.borderColor = '#ccc'}
                       />
+                      <select
+                        value={newExpense.category}
+                        onChange={(e) => setNewExpense(prev => ({ ...prev, category: e.target.value }))}
+                        style={{
+                          width: '100%',
+                          padding: '6px',
+                          marginBottom: '8px',
+                          border: '1px solid #ccc',
+                          fontFamily: 'inherit',
+                          fontSize: '10px',
+                          boxSizing: 'border-box',
+                          outline: 'none',
+                          background: '#fff',
+                          color: '#333',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {CATEGORIES.map(cat => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
                       {newExpense.items.map((item, idx) => (
                         <div key={idx} style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
                           <input
@@ -1116,11 +1251,15 @@ const ReceiptCalendar = () => {
               </div>
             </div>
 
-            <div style={{
-              borderTop: '2px solid #333',
-              margin: '12px 0 8px',
-              paddingTop: '12px',
-            }}>
+            <div
+              onClick={() => setShowMonthlyBreakdown(true)}
+              style={{
+                borderTop: '2px solid #333',
+                margin: '12px 0 8px',
+                paddingTop: '12px',
+                cursor: 'pointer',
+              }}
+            >
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -1130,8 +1269,108 @@ const ReceiptCalendar = () => {
                 <span>MONTHLY TOTAL:</span>
                 <span>${getMonthlyTotal().toFixed(2)}</span>
               </div>
+              <div style={{ fontSize: '8px', color: '#999', textAlign: 'center', marginTop: '4px' }}>
+                tap for breakdown
+              </div>
             </div>
           </div>
+
+          {/* Monthly Breakdown Modal */}
+          {showMonthlyBreakdown && (
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(0,0,0,0.7)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 1000,
+              }}
+              onClick={() => setShowMonthlyBreakdown(false)}
+            >
+              <div
+                style={{
+                  background: '#f5f2e8',
+                  padding: '20px',
+                  maxWidth: '350px',
+                  width: '90%',
+                  maxHeight: '80vh',
+                  overflow: 'auto',
+                  fontFamily: '"Courier New", monospace',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 'bold', letterSpacing: '2px' }}>
+                    {months[currentDate.getMonth()].toUpperCase()} {currentDate.getFullYear()}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#666', marginTop: '4px' }}>
+                    SPENDING BREAKDOWN
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px dashed #999', paddingTop: '12px' }}>
+                  {getMonthlyBreakdown().map((cat, idx) => (
+                    <div key={cat.id} style={{ marginBottom: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                        <span style={{ fontWeight: 'bold' }}>{cat.name}</span>
+                        <span>${cat.amount.toFixed(2)}</span>
+                      </div>
+                      <div style={{
+                        height: '8px',
+                        background: '#ddd',
+                        borderRadius: '4px',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          width: `${cat.percentage}%`,
+                          height: '100%',
+                          background: '#333',
+                          transition: 'width 0.3s',
+                        }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{
+                  borderTop: '2px solid #333',
+                  marginTop: '16px',
+                  paddingTop: '12px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                }}>
+                  <span>TOTAL:</span>
+                  <span>${getMonthlyTotal().toFixed(2)}</span>
+                </div>
+
+                <button
+                  onClick={() => setShowMonthlyBreakdown(false)}
+                  style={{
+                    width: '100%',
+                    marginTop: '16px',
+                    padding: '10px',
+                    background: '#333',
+                    color: '#fff',
+                    border: 'none',
+                    fontFamily: 'inherit',
+                    fontSize: '11px',
+                    letterSpacing: '2px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  CLOSE
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Barcode */}
           <div
