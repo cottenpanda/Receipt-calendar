@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+
+// Use the same host as the page, but port 3001 for API
+const API_URL = `http://${window.location.hostname}:3001`;
 
 const ReceiptCalendar = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -19,6 +22,65 @@ const ReceiptCalendar = () => {
     storeName: '',
     items: [{ name: '', price: '' }],
   });
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState(null);
+  const [scanPreview, setScanPreview] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // Handle receipt image scan
+  const handleScanReceipt = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    setScanError(null);
+
+    try {
+      // Convert to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Set preview image for scanning animation
+      setScanPreview(base64);
+
+      // Call API
+      const response = await fetch(`${API_URL}/api/extract-receipt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64 }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to scan receipt');
+      }
+
+      const data = await response.json();
+
+      // Auto-fill the form
+      setNewExpense({
+        storeName: data.storeName || '',
+        items: data.items?.length > 0
+          ? data.items.map(item => ({ name: item.name, price: item.price?.toString() || '' }))
+          : [{ name: '', price: '' }],
+      });
+      setShowAddExpense(true);
+
+    } catch (error) {
+      console.error('Scan error:', error);
+      setScanError('Failed to scan receipt. Make sure the API server is running.');
+    } finally {
+      setIsScanning(false);
+      setScanPreview(null);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   // Save expenses to localStorage whenever they change
   useEffect(() => {
@@ -91,6 +153,57 @@ const ReceiptCalendar = () => {
       }
     }
     return count;
+  };
+
+  // Generate fake expenses for past dates
+  const getFakeExpensesForDate = (day) => {
+    const fakeStores = [
+      { name: 'Trader Joe\'s', items: ['Organic Milk', 'Sourdough Bread', 'Avocados', 'Greek Yogurt', 'Bananas'] },
+      { name: 'Starbucks', items: ['Latte', 'Croissant', 'Iced Coffee', 'Breakfast Sandwich'] },
+      { name: 'Target', items: ['Paper Towels', 'Shampoo', 'Snacks', 'Cleaning Supplies'] },
+      { name: 'Whole Foods', items: ['Salmon Fillet', 'Quinoa', 'Kale', 'Almond Butter'] },
+      { name: 'Chipotle', items: ['Burrito Bowl', 'Chips & Guac', 'Drink'] },
+      { name: 'CVS', items: ['Vitamins', 'Toothpaste', 'Band-Aids', 'Lotion'] },
+      { name: 'Uber Eats', items: ['Pad Thai', 'Spring Rolls', 'Delivery Fee'] },
+      { name: 'Amazon Fresh', items: ['Coffee Beans', 'Pasta', 'Olive Oil', 'Cereal'] },
+      { name: 'Safeway', items: ['Chicken Breast', 'Rice', 'Vegetables', 'Eggs'] },
+      { name: 'Panera Bread', items: ['Soup & Salad Combo', 'Baguette', 'Iced Tea'] },
+    ];
+
+    // Use day as seed for consistent fake data
+    const storeIndex = day % fakeStores.length;
+    const store = fakeStores[storeIndex];
+    const totalAmount = day * 0.99;
+
+    // Generate 2-3 items that add up to the total
+    const numItems = 2 + (day % 2);
+    const items = [];
+    let remaining = totalAmount;
+
+    for (let i = 0; i < numItems; i++) {
+      const itemIndex = (day + i) % store.items.length;
+      const isLast = i === numItems - 1;
+      const price = isLast ? remaining : Math.round((remaining / (numItems - i)) * 100) / 100;
+      remaining -= price;
+      items.push({ name: store.items[itemIndex], price: price.toFixed(2) });
+    }
+
+    return [{
+      id: `fake-${day}`,
+      storeName: store.name,
+      items: items,
+      isFake: true,
+    }];
+  };
+
+  // Check if a date is a past date (not today, not future)
+  const isPastDate = (day) => {
+    if (!day) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+    checkDate.setHours(0, 0, 0, 0);
+    return checkDate < today;
   };
 
   // Add new expense
@@ -729,7 +842,7 @@ const ReceiptCalendar = () => {
                       marginTop: '2px',
                       fontWeight: hasExpenses ? 'bold' : 'normal',
                     }}>
-                      {hasExpenses ? `$${dayTotal.toFixed(0)}` : isFutureDate(day) ? '' : formatPrice(day)}
+                      {hasExpenses ? `$${dayTotal.toFixed(2)}` : (isFutureDate(day) || isToday(day)) ? '' : formatPrice(day)}
                     </div>
                   )}
                 </div>
@@ -768,23 +881,111 @@ const ReceiptCalendar = () => {
                 <div style={{ marginTop: '12px', borderTop: '1px dashed #999', paddingTop: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontSize: '11px', color: '#666' }}>EXPENSES:</span>
-                    <button
-                      onClick={() => setShowAddExpense(!showAddExpense)}
-                      style={{
-                        background: 'none',
-                        border: '1px solid #666',
-                        padding: '2px 8px',
-                        fontSize: '10px',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      {showAddExpense ? 'CANCEL' : '+ ADD'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        ref={fileInputRef}
+                        onChange={handleScanReceipt}
+                        style={{ display: 'none' }}
+                      />
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isScanning}
+                        style={{
+                          background: 'none',
+                          border: '1px solid #666',
+                          padding: '2px 8px',
+                          fontSize: '10px',
+                          cursor: isScanning ? 'wait' : 'pointer',
+                          fontFamily: 'inherit',
+                          color: '#333',
+                          opacity: isScanning ? 0.5 : 1,
+                        }}
+                      >
+                        {isScanning ? 'SCANNING...' : 'SCAN'}
+                      </button>
+                      <button
+                        onClick={() => setShowAddExpense(!showAddExpense)}
+                        style={{
+                          background: 'none',
+                          border: '1px solid #666',
+                          padding: '2px 8px',
+                          fontSize: '10px',
+                          cursor: 'pointer',
+                          fontFamily: 'inherit',
+                          color: '#333',
+                        }}
+                      >
+                        {showAddExpense ? 'CANCEL' : '+ ADD'}
+                      </button>
+                    </div>
                   </div>
+                  {scanError && (
+                    <div style={{ fontSize: '9px', color: '#d32f2f', marginBottom: '8px' }}>
+                      {scanError}
+                    </div>
+                  )}
+
+                  {/* Scanning Animation */}
+                  {isScanning && scanPreview && (
+                    <div style={{
+                      position: 'relative',
+                      marginBottom: '10px',
+                      border: '2px solid #333',
+                      borderRadius: '4px',
+                      overflow: 'hidden',
+                      background: '#000',
+                    }}>
+                      <img
+                        src={scanPreview}
+                        alt="Scanning receipt"
+                        style={{
+                          width: '100%',
+                          maxHeight: '200px',
+                          objectFit: 'contain',
+                          opacity: 0.7,
+                        }}
+                      />
+                      {/* Scanning line */}
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        height: '3px',
+                        background: 'linear-gradient(90deg, transparent, #0abab5, #81d8d0, #0abab5, transparent)',
+                        boxShadow: '0 0 10px #0abab5, 0 0 20px #81d8d0',
+                        animation: 'scanLine 1.5s ease-in-out infinite',
+                      }} />
+                      <style>{`
+                        @keyframes scanLine {
+                          0% { top: 0; }
+                          50% { top: calc(100% - 3px); }
+                          100% { top: 0; }
+                        }
+                      `}</style>
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '8px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: 'rgba(0,0,0,0.7)',
+                        color: '#fff',
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '10px',
+                        fontWeight: 'bold',
+                        letterSpacing: '1px',
+                      }}>
+                        SCANNING...
+                      </div>
+                    </div>
+                  )}
 
                   {/* Add Expense Form */}
-                  {showAddExpense && (
+                  {showAddExpense && !isScanning && (
                     <div style={{ background: '#fff', padding: '10px', marginBottom: '10px', border: '1px solid #ccc', boxSizing: 'border-box' }}>
                       <input
                         type="text"
@@ -825,12 +1026,12 @@ const ReceiptCalendar = () => {
                             onBlur={(e) => e.target.style.borderColor = '#ccc'}
                           />
                           {newExpense.items.length > 1 && (
-                            <button onClick={() => removeItemRow(idx)} style={{ padding: '4px 8px', fontSize: '10px', cursor: 'pointer', border: '1px solid #ccc', background: '#fff', flexShrink: 0 }}>×</button>
+                            <button onClick={() => removeItemRow(idx)} style={{ padding: '4px 8px', fontSize: '10px', cursor: 'pointer', border: '1px solid #ccc', background: '#fff', color: '#333', flexShrink: 0 }}>×</button>
                           )}
                         </div>
                       ))}
                       <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
-                        <button onClick={addItemRow} style={{ flex: 1, padding: '4px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit', border: '1px solid #666', background: '#fff' }}>+ ITEM</button>
+                        <button onClick={addItemRow} style={{ flex: 1, padding: '4px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit', border: '1px solid #666', background: '#fff', color: '#333' }}>+ ITEM</button>
                         <button onClick={addExpense} style={{ flex: 1, padding: '4px', fontSize: '10px', cursor: 'pointer', fontFamily: 'inherit', border: '1px solid #333', background: '#333', color: '#fff' }}>SAVE</button>
                       </div>
                     </div>
@@ -863,7 +1064,29 @@ const ReceiptCalendar = () => {
                         <span>${dateTotal.toFixed(2)}</span>
                       </div>
                     </div>
-                  ) : !showAddExpense && (
+                  ) : isPastDate(selectedDate) && !showAddExpense ? (
+                    // Show fake expenses for past dates
+                    <div>
+                      {getFakeExpensesForDate(selectedDate).map((expense) => (
+                        <div key={expense.id} style={{ background: '#fff', padding: '8px', marginBottom: '6px', border: '1px dashed #ccc', opacity: 0.8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#666' }}>{expense.storeName}</span>
+                            <span style={{ fontSize: '8px', color: '#999', fontStyle: 'italic' }}>sample</span>
+                          </div>
+                          {expense.items.map((item, idx) => (
+                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#888', marginTop: '4px' }}>
+                              <span>{item.name}</span>
+                              <span>${parseFloat(item.price).toFixed(2)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', marginTop: '8px', paddingTop: '8px', borderTop: '2px solid #333', color: '#666' }}>
+                        <span>DAY TOTAL:</span>
+                        <span>${(selectedDate * 0.99).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ) : !showAddExpense && !isScanning && (
                     <div style={{ fontSize: '10px', color: '#999', textAlign: 'center', padding: '10px' }}>
                       No expenses recorded
                     </div>
