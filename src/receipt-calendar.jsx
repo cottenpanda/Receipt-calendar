@@ -85,7 +85,11 @@ const ReceiptCalendar = () => {
   const [showMonthlyBreakdown, setShowMonthlyBreakdown] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [scanPreview, setScanPreview] = useState(null);
+  const [globalScanResult, setGlobalScanResult] = useState(null);
+  const [isGlobalScanning, setIsGlobalScanning] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const fileInputRef = useRef(null);
+  const globalFileInputRef = useRef(null);
 
   // Handle receipt image scan
   const handleScanReceipt = async (event) => {
@@ -140,6 +144,92 @@ const ReceiptCalendar = () => {
       // Reset file input
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Handle global receipt scan with date detection
+  const handleGlobalScan = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    setIsGlobalScanning(true);
+    setScanError(null);
+    setGlobalScanResult(null);
+
+    try {
+      // Convert to base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      // Set preview image for scanning animation
+      setScanPreview(base64);
+
+      // Call API
+      const response = await fetch(`${API_URL}/api/extract-receipt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: base64 }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to scan receipt');
+      }
+
+      const data = await response.json();
+
+      // Parse the date from the response
+      let detectedDate = null;
+      if (data.date) {
+        const [year, month, day] = data.date.split('-').map(Number);
+        detectedDate = { year, month: month - 1, day }; // month is 0-indexed
+      }
+
+      // If date was detected, navigate to that month and select the date
+      if (detectedDate) {
+        // Navigate to the detected month/year
+        setCurrentDate(new Date(detectedDate.year, detectedDate.month, 1));
+        setSelectedDate(detectedDate.day);
+      } else {
+        // Use today if no date detected
+        const today = new Date();
+        setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1));
+        setSelectedDate(today.getDate());
+      }
+
+      // Store the scanned data and show confirmation
+      setGlobalScanResult({
+        storeName: data.storeName || '',
+        items: data.items || [],
+        detectedDate: data.date,
+      });
+
+      // Auto-fill the form with auto-detected category
+      const storeName = data.storeName || '';
+      setNewExpense({
+        storeName: storeName,
+        category: detectCategory(storeName),
+        items: data.items?.length > 0
+          ? data.items.map(item => ({ name: item.name, price: item.price?.toString() || '' }))
+          : [{ name: '', price: '' }],
+      });
+      setShowAddExpense(true);
+
+    } catch (error) {
+      console.error('Scan error:', error);
+      setScanError('Failed to scan receipt. Make sure the API server is running.');
+    } finally {
+      setIsScanning(false);
+      setIsGlobalScanning(false);
+      setScanPreview(null);
+      // Reset file input
+      if (globalFileInputRef.current) {
+        globalFileInputRef.current.value = '';
       }
     }
   };
@@ -332,6 +422,7 @@ const ReceiptCalendar = () => {
 
     setNewExpense({ storeName: '', category: 'other', items: [{ name: '', price: '' }] });
     setShowAddExpense(false);
+    setShowCategoryDropdown(false);
   };
 
   // Delete expense
@@ -763,10 +854,129 @@ const ReceiptCalendar = () => {
           <div style={{
             fontSize: '11px',
             color: '#444',
-            marginBottom: '16px',
+            marginBottom: '12px',
           }}>
-            <div>DATE: {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase()}</div>
-            <div>TIME: {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div>{new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase()}</div>
+          </div>
+
+          {/* Global Scan Button */}
+          <div style={{ marginBottom: '16px' }}>
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              ref={globalFileInputRef}
+              onChange={handleGlobalScan}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => globalFileInputRef.current?.click()}
+              disabled={isScanning}
+              style={{
+                width: '100%',
+                padding: '10px',
+                fontSize: '11px',
+                fontFamily: 'inherit',
+                letterSpacing: '2px',
+                background: isScanning ? '#666' : '#333',
+                color: '#fff',
+                border: 'none',
+                cursor: isScanning ? 'wait' : 'pointer',
+              }}
+            >
+              {isScanning ? 'SCANNING...' : 'SCAN RECEIPT'}
+            </button>
+
+            {/* Global Scanning Animation */}
+            {isScanning && scanPreview && isGlobalScanning && (
+              <div style={{
+                position: 'relative',
+                marginTop: '10px',
+                border: '2px solid #333',
+                borderRadius: '4px',
+                overflow: 'hidden',
+                background: '#000',
+              }}>
+                <img
+                  src={scanPreview}
+                  alt="Scanning receipt"
+                  style={{
+                    width: '100%',
+                    maxHeight: '200px',
+                    objectFit: 'contain',
+                    opacity: 0.7,
+                  }}
+                />
+                <div style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: '3px',
+                  background: 'linear-gradient(90deg, transparent, #0abab5, #81d8d0, #0abab5, transparent)',
+                  boxShadow: '0 0 10px #0abab5, 0 0 20px #81d8d0',
+                  animation: 'globalScanLine 1.5s ease-in-out infinite',
+                }} />
+                <style>{`
+                  @keyframes globalScanLine {
+                    0% { top: 0; }
+                    50% { top: calc(100% - 3px); }
+                    100% { top: 0; }
+                  }
+                `}</style>
+                <div style={{
+                  position: 'absolute',
+                  bottom: '8px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  background: 'rgba(0,0,0,0.7)',
+                  color: '#fff',
+                  padding: '4px 12px',
+                  borderRadius: '12px',
+                  fontSize: '10px',
+                  fontWeight: 'bold',
+                  letterSpacing: '1px',
+                }}>
+                  SCANNING...
+                </div>
+              </div>
+            )}
+
+            {/* Scan Result Notice */}
+            {globalScanResult && !isScanning && (
+              <div style={{
+                marginTop: '8px',
+                padding: '8px',
+                background: '#e8f5e9',
+                border: '1px solid #4caf50',
+                borderRadius: '4px',
+                fontSize: '10px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>
+                    {globalScanResult.detectedDate
+                      ? `DATE DETECTED: ${globalScanResult.detectedDate}`
+                      : 'DATE NOT DETECTED - USING TODAY'}
+                  </span>
+                  <button
+                    onClick={() => setGlobalScanResult(null)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#666',
+                      cursor: 'pointer',
+                      fontSize: '14px',
+                      padding: '0 4px',
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+                <div style={{ color: '#555', marginTop: '4px' }}>
+                  {globalScanResult.storeName} - {globalScanResult.items.length} item(s) found
+                </div>
+              </div>
+            )}
           </div>
           
           {/* Divider */}
@@ -908,11 +1118,9 @@ const ReceiptCalendar = () => {
                     position: 'relative',
                     background: isToday(day)
                       ? '#1a1a1a'
-                      : hasExpenses
-                        ? '#fff3e0'
-                        : selectedDate === day
-                          ? '#e0ddd3'
-                          : 'transparent',
+                      : selectedDate === day
+                        ? '#e0ddd3'
+                        : 'transparent',
                     color: isToday(day)
                       ? '#f5f2e8'
                       : holiday
@@ -922,16 +1130,15 @@ const ReceiptCalendar = () => {
                           : 'transparent',
                     transition: 'all 0.15s',
                     borderRadius: '2px',
-                    border: hasExpenses && !isToday(day) ? '1px dashed #ffab40' : 'none',
                   }}
                   onMouseOver={(e) => {
                     if (day && !isToday(day)) {
-                      e.currentTarget.style.background = hasExpenses ? '#ffe0b2' : '#e8e5db';
+                      e.currentTarget.style.background = '#e8e5db';
                     }
                   }}
                   onMouseOut={(e) => {
                     if (day && !isToday(day) && selectedDate !== day) {
-                      e.currentTarget.style.background = hasExpenses ? '#fff3e0' : 'transparent';
+                      e.currentTarget.style.background = 'transparent';
                     }
                   }}
                   title={holiday ? holiday.name : hasExpenses ? `$${dayTotal.toFixed(2)} spent` : ''}
@@ -945,9 +1152,8 @@ const ReceiptCalendar = () => {
                   {day && (
                     <div style={{
                       fontSize: '8px',
-                      color: isToday(day) ? (hasExpenses ? '#fff' : '#aaa') : hasExpenses ? '#e65100' : '#999',
+                      color: isToday(day) ? '#aaa' : '#999',
                       marginTop: '2px',
-                      fontWeight: hasExpenses ? 'bold' : 'normal',
                     }}>
                       {hasExpenses ? `$${dayTotal.toFixed(2)}` : (isFutureDate(day) || isToday(day)) ? '' : formatPrice(day)}
                     </div>
@@ -1014,7 +1220,10 @@ const ReceiptCalendar = () => {
                         {isScanning ? 'SCANNING...' : 'SCAN'}
                       </button>
                       <button
-                        onClick={() => setShowAddExpense(!showAddExpense)}
+                        onClick={() => {
+                          setShowAddExpense(!showAddExpense);
+                          setShowCategoryDropdown(false);
+                        }}
                         style={{
                           background: 'none',
                           border: '1px solid #666',
@@ -1036,7 +1245,7 @@ const ReceiptCalendar = () => {
                   )}
 
                   {/* Scanning Animation */}
-                  {isScanning && scanPreview && (
+                  {isScanning && scanPreview && !isGlobalScanning && (
                     <div style={{
                       position: 'relative',
                       marginBottom: '10px',
@@ -1119,27 +1328,76 @@ const ReceiptCalendar = () => {
                         onFocus={(e) => e.target.style.borderColor = '#333'}
                         onBlur={(e) => e.target.style.borderColor = '#ccc'}
                       />
-                      <select
-                        value={newExpense.category}
-                        onChange={(e) => setNewExpense(prev => ({ ...prev, category: e.target.value }))}
-                        style={{
-                          width: '100%',
-                          padding: '6px',
-                          marginBottom: '8px',
-                          border: '1px solid #ccc',
-                          fontFamily: 'inherit',
-                          fontSize: '10px',
-                          boxSizing: 'border-box',
-                          outline: 'none',
-                          background: '#fff',
-                          color: '#333',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {CATEGORIES.map(cat => (
-                          <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                      </select>
+                      {/* Custom Category Dropdown */}
+                      <div style={{ position: 'relative', marginBottom: '8px' }}>
+                        <div
+                          onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                          style={{
+                            width: '100%',
+                            padding: '6px',
+                            border: '1px solid #ccc',
+                            fontFamily: 'inherit',
+                            fontSize: '10px',
+                            boxSizing: 'border-box',
+                            background: '#fff',
+                            color: '#333',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <span>{CATEGORIES.find(c => c.id === newExpense.category)?.name || 'Select category'}</span>
+                          <span style={{ fontSize: '8px' }}>{showCategoryDropdown ? '▲' : '▼'}</span>
+                        </div>
+                        {showCategoryDropdown && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            background: '#f5f2e8',
+                            border: '1px dashed #999',
+                            borderTop: 'none',
+                            zIndex: 100,
+                            maxHeight: '150px',
+                            overflowY: 'auto',
+                          }}>
+                            {CATEGORIES.map(cat => (
+                              <div
+                                key={cat.id}
+                                onClick={() => {
+                                  setNewExpense(prev => ({ ...prev, category: cat.id }));
+                                  setShowCategoryDropdown(false);
+                                }}
+                                style={{
+                                  padding: '6px 8px',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                  borderBottom: '1px dotted #ccc',
+                                  background: newExpense.category === cat.id ? '#e0ddd3' : 'transparent',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                }}
+                                onMouseOver={(e) => {
+                                  if (newExpense.category !== cat.id) {
+                                    e.currentTarget.style.background = '#e8e5db';
+                                  }
+                                }}
+                                onMouseOut={(e) => {
+                                  if (newExpense.category !== cat.id) {
+                                    e.currentTarget.style.background = 'transparent';
+                                  }
+                                }}
+                              >
+                                <span>{cat.name}</span>
+                                {newExpense.category === cat.id && <span style={{ fontSize: '10px' }}>✓</span>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       {newExpense.items.map((item, idx) => (
                         <div key={idx} style={{ display: 'flex', gap: '4px', marginBottom: '4px' }}>
                           <input
