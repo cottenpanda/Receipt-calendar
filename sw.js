@@ -1,4 +1,4 @@
-const CACHE_NAME = 'receipt-calendar-v3';
+const CACHE_NAME = 'receipt-calendar-v4';
 const urlsToCache = [
   '/Receipt-calendar/',
   '/Receipt-calendar/index.html',
