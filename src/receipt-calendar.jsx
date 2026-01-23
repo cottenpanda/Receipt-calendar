@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-// Use the same host as the page, but port 3001 for API
-const API_URL = `http://${window.location.hostname}:3001`;
+// API URL: use local server for development, Vercel for production
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname.startsWith('192.168.');
+const API_URL = isLocalhost
+  ? `http://${window.location.hostname}:3001`
+  : 'https://receipt-calendar-api.vercel.app';
 
 // Expense categories
 const CATEGORIES = [
