@@ -915,8 +915,7 @@ const ReceiptCalendar = () => {
             <input
               type="file"
               accept="image/*"
-              capture="environment"
-              ref={globalFileInputRef}
+                            ref={globalFileInputRef}
               onChange={handleGlobalScan}
               style={{ display: 'none' }}
             />
@@ -1249,8 +1248,7 @@ const ReceiptCalendar = () => {
                       <input
                         type="file"
                         accept="image/*"
-                        capture="environment"
-                        ref={fileInputRef}
+                                                ref={fileInputRef}
                         onChange={handleScanReceipt}
                         style={{ display: 'none' }}
                       />
