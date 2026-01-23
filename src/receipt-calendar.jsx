@@ -6,6 +6,48 @@ const API_URL = isLocalhost
   ? `http://${window.location.hostname}:3001`
   : 'https://receipt-calendar-api.vercel.app';
 
+// Compress image to reduce size for API (max 4MB to stay under 5MB limit)
+const compressImage = (base64, maxSizeMB = 4) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+
+      // Calculate size and reduce if needed
+      const maxDimension = 2000; // Max width/height
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          height = (height / width) * maxDimension;
+          width = maxDimension;
+        } else {
+          width = (width / height) * maxDimension;
+          height = maxDimension;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Start with quality 0.8 and reduce if needed
+      let quality = 0.8;
+      let result = canvas.toDataURL('image/jpeg', quality);
+
+      // Reduce quality until under maxSizeMB
+      while (result.length > maxSizeMB * 1024 * 1024 * 1.37 && quality > 0.1) {
+        quality -= 0.1;
+        result = canvas.toDataURL('image/jpeg', quality);
+      }
+
+      resolve(result);
+    };
+    img.src = base64;
+  });
+};
+
 // Expense categories
 const CATEGORIES = [
   { id: 'food', name: 'Food & Dining', color: '#4caf50' },
@@ -114,11 +156,14 @@ const ReceiptCalendar = () => {
       // Set preview image for scanning animation
       setScanPreview(base64);
 
+      // Compress image to stay under API size limit
+      const compressedImage = await compressImage(base64);
+
       // Call API
       const response = await fetch(`${API_URL}/api/extract-receipt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64 }),
+        body: JSON.stringify({ image: compressedImage }),
       });
 
       if (!response.ok) {
@@ -173,11 +218,14 @@ const ReceiptCalendar = () => {
       // Set preview image for scanning animation
       setScanPreview(base64);
 
+      // Compress image to stay under API size limit
+      const compressedImage = await compressImage(base64);
+
       // Call API
       const response = await fetch(`${API_URL}/api/extract-receipt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: base64 }),
+        body: JSON.stringify({ image: compressedImage }),
       });
 
       if (!response.ok) {
