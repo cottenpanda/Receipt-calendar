@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#1a1a1a"/>
+
+  <!-- Receipt paper -->
+  <rect x="120" y="60" width="272" height="360" fill="#f5f2e8" rx="4"/>
+
+  <!-- Torn edge at bottom -->
+  <path d="M120 420 L140 400 L160 420 L180 400 L200 420 L220 400 L240 420 L260 400 L280 420 L300 400 L320 420 L340 400 L360 420 L380 400 L392 420 L392 420 L120 420 Z" fill="#f5f2e8"/>
+
+  <!-- Receipt lines -->
+  <rect x="150" y="100" width="120" height="12" fill="#333" rx="2"/>
+  <rect x="150" y="130" width="80" height="8" fill="#999" rx="2"/>
+
+  <rect x="150" y="170" width="180" height="6" fill="#ccc" rx="1"/>
+  <rect x="150" y="190" width="160" height="6" fill="#ccc" rx="1"/>
+  <rect x="150" y="210" width="140" height="6" fill="#ccc" rx="1"/>
+  <rect x="150" y="230" width="170" height="6" fill="#ccc" rx="1"/>
+
+  <!-- Total line -->
+  <rect x="150" y="270" width="180" height="2" fill="#333"/>
+  <rect x="150" y="290" width="100" height="10" fill="#333" rx="2"/>
+  <rect x="280" y="290" width="50" height="10" fill="#333" rx="2"/>
+
+  <!-- Barcode -->
+  <rect x="160" y="330" width="4" height="40" fill="#333"/>
+  <rect x="168" y="330" width="2" height="40" fill="#333"/>
+  <rect x="174" y="330" width="6" height="40" fill="#333"/>
+  <rect x="184" y="330" width="2" height="40" fill="#333"/>
+  <rect x="190" y="330" width="4" height="40" fill="#333"/>
+  <rect x="198" y="330" width="2" height="40" fill="#333"/>
+  <rect x="204" y="330" width="6" height="40" fill="#333"/>
+  <rect x="214" y="330" width="4" height="40" fill="#333"/>
+  <rect x="222" y="330" width="2" height="40" fill="#333"/>
+  <rect x="228" y="330" width="4" height="40" fill="#333"/>
+  <rect x="236" y="330" width="6" height="40" fill="#333"/>
+  <rect x="246" y="330" width="2" height="40" fill="#333"/>
+  <rect x="252" y="330" width="4" height="40" fill="#333"/>
+  <rect x="260" y="330" width="2" height="40" fill="#333"/>
+  <rect x="266" y="330" width="6" height="40" fill="#333"/>
+  <rect x="276" y="330" width="4" height="40" fill="#333"/>
+  <rect x="284" y="330" width="2" height="40" fill="#333"/>
+  <rect x="290" y="330" width="6" height="40" fill="#333"/>
+  <rect x="300" y="330" width="2" height="40" fill="#333"/>
+  <rect x="306" y="330" width="4" height="40" fill="#333"/>
+  <rect x="314" y="330" width="6" height="40" fill="#333"/>
+
+  <!-- Calendar hint - small grid -->
+  <g transform="translate(340, 60)">
+    <rect width="60" height="60" fill="#333" rx="8"/>
+    <text x="30" y="42" text-anchor="middle" fill="#f5f2e8" font-family="Arial" font-weight="bold" font-size="32">21</text>
+  </g>
+</svg>
