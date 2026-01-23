@@ -306,64 +306,42 @@ const ReceiptCalendar = () => {
     return dayExpenses.reduce((sum, exp) => sum + exp.items.reduce((s, item) => s + (parseFloat(item.price) || 0), 0), 0);
   };
 
-  // Get monthly total (includes fake prices for past dates without real expenses)
+  // Get monthly total (real expenses only)
   const getMonthlyTotal = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     let total = 0;
 
     for (let day = 1; day <= getDaysInMonth(currentDate); day++) {
       const key = getExpenseKey(year, month, day);
       const dayExpenses = expenses[key] || [];
-      const checkDate = new Date(year, month, day);
-
-      if (dayExpenses.length > 0) {
-        // Use real expenses
-        dayExpenses.forEach(exp => {
-          exp.items.forEach(item => {
-            total += parseFloat(item.price) || 0;
-          });
+      dayExpenses.forEach(exp => {
+        exp.items.forEach(item => {
+          total += parseFloat(item.price) || 0;
         });
-      } else if (checkDate <= today) {
-        // Use fake price for past dates without real expenses
-        total += day * 0.99;
-      }
+      });
     }
     return total;
   };
 
-  // Get monthly transaction count (includes fake transaction for past dates without real expenses)
+  // Get monthly transaction count (real transactions only)
   const getMonthlyTransactionCount = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
     let count = 0;
 
     for (let day = 1; day <= getDaysInMonth(currentDate); day++) {
       const key = getExpenseKey(year, month, day);
       const dayExpenses = expenses[key] || [];
-      const checkDate = new Date(year, month, day);
-
-      if (dayExpenses.length > 0) {
-        // Count real transactions
-        count += dayExpenses.length;
-      } else if (checkDate <= today) {
-        // Count 1 fake transaction for past dates
-        count += 1;
-      }
+      count += dayExpenses.length;
     }
     return count;
   };
 
-  // Get monthly breakdown by category
+  // Get monthly breakdown by category (real expenses only)
   const getMonthlyBreakdown = () => {
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     const breakdown = {};
     CATEGORIES.forEach(cat => {
@@ -373,20 +351,11 @@ const ReceiptCalendar = () => {
     for (let day = 1; day <= getDaysInMonth(currentDate); day++) {
       const key = getExpenseKey(year, month, day);
       const dayExpenses = expenses[key] || [];
-      const checkDate = new Date(year, month, day);
-
-      if (dayExpenses.length > 0) {
-        // Use real expenses
-        dayExpenses.forEach(exp => {
-          const category = exp.category || 'other';
-          const total = exp.items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0);
-          breakdown[category] = (breakdown[category] || 0) + total;
-        });
-      } else if (checkDate < today) {
-        // Use fake expense category for past dates
-        const fakeExp = getFakeExpensesForDate(day)[0];
-        breakdown[fakeExp.category] = (breakdown[fakeExp.category] || 0) + (day * 0.99);
-      }
+      dayExpenses.forEach(exp => {
+        const category = exp.category || 'other';
+        const total = exp.items.reduce((sum, item) => sum + (parseFloat(item.price) || 0), 0);
+        breakdown[category] = (breakdown[category] || 0) + total;
+      });
     }
 
     // Convert to sorted array with percentages
@@ -399,58 +368,6 @@ const ReceiptCalendar = () => {
       }))
       .filter(cat => cat.amount > 0)
       .sort((a, b) => b.amount - a.amount);
-  };
-
-  // Generate fake expenses for past dates
-  const getFakeExpensesForDate = (day) => {
-    const fakeStores = [
-      { name: 'Trader Joe\'s', category: 'grocery', items: ['Organic Milk', 'Sourdough Bread', 'Avocados', 'Greek Yogurt', 'Bananas'] },
-      { name: 'Starbucks', category: 'coffee', items: ['Latte', 'Croissant', 'Iced Coffee', 'Breakfast Sandwich'] },
-      { name: 'Target', category: 'shopping', items: ['Paper Towels', 'Shampoo', 'Snacks', 'Cleaning Supplies'] },
-      { name: 'Whole Foods', category: 'grocery', items: ['Salmon Fillet', 'Quinoa', 'Kale', 'Almond Butter'] },
-      { name: 'Chipotle', category: 'food', items: ['Burrito Bowl', 'Chips & Guac', 'Drink'] },
-      { name: 'CVS', category: 'healthcare', items: ['Vitamins', 'Toothpaste', 'Band-Aids', 'Lotion'] },
-      { name: 'Uber Eats', category: 'food', items: ['Pad Thai', 'Spring Rolls', 'Delivery Fee'] },
-      { name: 'Amazon Fresh', category: 'grocery', items: ['Coffee Beans', 'Pasta', 'Olive Oil', 'Cereal'] },
-      { name: 'Safeway', category: 'grocery', items: ['Chicken Breast', 'Rice', 'Vegetables', 'Eggs'] },
-      { name: 'Panera Bread', category: 'food', items: ['Soup & Salad Combo', 'Baguette', 'Iced Tea'] },
-    ];
-
-    // Use day as seed for consistent fake data
-    const storeIndex = day % fakeStores.length;
-    const store = fakeStores[storeIndex];
-    const totalAmount = day * 0.99;
-
-    // Generate 2-3 items that add up to the total
-    const numItems = 2 + (day % 2);
-    const items = [];
-    let remaining = totalAmount;
-
-    for (let i = 0; i < numItems; i++) {
-      const itemIndex = (day + i) % store.items.length;
-      const isLast = i === numItems - 1;
-      const price = isLast ? remaining : Math.round((remaining / (numItems - i)) * 100) / 100;
-      remaining -= price;
-      items.push({ name: store.items[itemIndex], price: price.toFixed(2) });
-    }
-
-    return [{
-      id: `fake-${day}`,
-      storeName: store.name,
-      category: store.category,
-      items: items,
-      isFake: true,
-    }];
-  };
-
-  // Check if a date is a past date (not today, not future)
-  const isPastDate = (day) => {
-    if (!day) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const checkDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    checkDate.setHours(0, 0, 0, 0);
-    return checkDate < today;
   };
 
   // Add new expense
@@ -662,19 +579,6 @@ const ReceiptCalendar = () => {
            currentDate.getFullYear() === today.getFullYear();
   };
 
-  const isFutureDate = (day) => {
-    if (!day) return false;
-    const today = new Date();
-    const checkDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-    today.setHours(0, 0, 0, 0);
-    return checkDate > today;
-  };
-
-  const formatPrice = (day) => {
-    if (!day) return '';
-    return `$${(day * 0.99).toFixed(2)}`;
-  };
-  
   const generateBarcode = () => {
     // Generate a realistic barcode pattern with varying bar widths
     const patterns = [
@@ -1205,7 +1109,7 @@ const ReceiptCalendar = () => {
                       color: isToday(day) ? '#aaa' : '#999',
                       marginTop: '2px',
                     }}>
-                      {hasExpenses ? `$${dayTotal.toFixed(2)}` : (isFutureDate(day) || isToday(day)) ? '' : formatPrice(day)}
+                      {hasExpenses ? `$${dayTotal.toFixed(2)}` : ''}
                     </div>
                   )}
                 </div>
@@ -1504,28 +1408,6 @@ const ReceiptCalendar = () => {
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', marginTop: '8px', paddingTop: '8px', borderTop: '2px solid #333' }}>
                         <span>DAY TOTAL:</span>
                         <span>${dateTotal.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  ) : isPastDate(selectedDate) && !showAddExpense ? (
-                    // Show fake expenses for past dates
-                    <div>
-                      {getFakeExpensesForDate(selectedDate).map((expense) => (
-                        <div key={expense.id} style={{ background: '#fff', padding: '8px', marginBottom: '6px', border: '1px dashed #ccc', opacity: 0.8 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 'bold', color: '#666' }}>{expense.storeName}</span>
-                            <span style={{ fontSize: '8px', color: '#999', fontStyle: 'italic' }}>sample</span>
-                          </div>
-                          {expense.items.map((item, idx) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#888', marginTop: '4px' }}>
-                              <span>{item.name}</span>
-                              <span>${parseFloat(item.price).toFixed(2)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: 'bold', marginTop: '8px', paddingTop: '8px', borderTop: '2px solid #333', color: '#666' }}>
-                        <span>DAY TOTAL:</span>
-                        <span>${(selectedDate * 0.99).toFixed(2)}</span>
                       </div>
                     </div>
                   ) : !showAddExpense && !isScanning && (
